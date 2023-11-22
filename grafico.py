@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Flatten
-from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.utils import to_categorical, plot_model
 
 # Carregar os dados
 train_data = pd.read_csv('trainReduzido.csv', index_col=0)
@@ -13,31 +13,38 @@ validation_data = pd.read_csv('validacao.csv', index_col=0)
 train_labels = train_data['label']
 train_images = train_data.drop('label', axis=1)
 
-# Verificar as classes nos rótulos
-unique_classes = np.unique(train_labels)
-print("Classes únicas nos rótulos de treinamento:", unique_classes)
-
 # Normalizar os pixels
 train_images = train_images / 255.0
 validation_images = validation_data / 255.0
 
 # Converter os rótulos para one-hot encoding
 # Assegurar que o número de classes é 10
-train_labels = to_categorical(train_labels, num_classes=10)
+train_labels_one_hot = to_categorical(train_labels, num_classes=10)
 
 # Redimensionar os dados de entrada para o modelo
 train_images = train_images.values.reshape(-1, 28, 28)
 validation_images = validation_images.values.reshape(-1, 28, 28)
 
-# Visualizar algumas imagens de dígitos
-plt.figure(figsize=(10, 10))
-for i in range(25):
-    plt.subplot(5, 5, i + 1)
-    plt.xticks([])
-    plt.yticks([])
-    plt.grid(False)
-    plt.imshow(train_images[i], cmap=plt.cm.binary)
-    plt.xlabel(np.argmax(train_labels[i]))
+# Visualizar algumas imagens de dígitos para cada classe presente
+examples_per_class = 5
+
+# Identificar as classes presentes nos dados
+classes_presentes = np.unique(train_labels)
+
+# Criar subplots para as classes presentes
+fig, axes = plt.subplots(len(classes_presentes), examples_per_class, figsize=(10, len(classes_presentes) * 2))
+fig.tight_layout(pad=3.0)
+
+for class_idx, digit in enumerate(classes_presentes):
+    idxs = np.where(train_labels == digit)[0]
+    idxs = np.random.choice(idxs, examples_per_class, replace=False)
+    for j, idx in enumerate(idxs):
+        ax = axes[class_idx, j]
+        ax.imshow(train_images[idx], cmap='gray')
+        ax.axis('off')
+        if j == 0:
+            ax.set_title(f"Classe {digit}")
+
 plt.show()
 
 # Definir o modelo
@@ -51,8 +58,14 @@ model = Sequential([
 # Compilar o modelo
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
+# Sumário do Modelo
+model.summary()
+
+# Visualização Gráfica da Arquitetura (requer pydot e graphviz)
+plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True)
+
 # Treinar o modelo e guardar o histórico
-history = model.fit(train_images, train_labels, epochs=10, batch_size=128, validation_split=0.2)
+history = model.fit(train_images, train_labels_one_hot, epochs=10, batch_size=128, validation_split=0.2)
 
 # Visualizar o histórico de treinamento
 plt.figure(figsize=(12, 4))
