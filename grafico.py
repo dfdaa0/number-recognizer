@@ -1,73 +1,51 @@
+# Importações necessárias
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Flatten
-from tensorflow.keras.utils import to_categorical, plot_model
+from tensorflow.keras.utils import to_categorical
 
-# Carregar os dados
+# Carregando os dados de treinamento e validação
 train_data = pd.read_csv('trainReduzido.csv', index_col=0)
 validation_data = pd.read_csv('validacao.csv', index_col=0)
 
-# Separar os rótulos e os pixels
+# Separando rótulos (dígitos) e imagens do conjunto de treinamento
 train_labels = train_data['label']
 train_images = train_data.drop('label', axis=1)
 
-# Normalizar os pixels
+# Normalizando os pixels das imagens para valores entre 0 e 1
 train_images = train_images / 255.0
 validation_images = validation_data / 255.0
 
-# Converter os rótulos para one-hot encoding
-# Assegurar que o número de classes é 10
+# Convertendo rótulos para representação one-hot encoding
 train_labels_one_hot = to_categorical(train_labels, num_classes=10)
 
-# Redimensionar os dados de entrada para o modelo
-train_images = train_images.values.reshape(-1, 28, 28)
-validation_images = validation_images.values.reshape(-1, 28, 28)
+# Redimensionando os dados de imagem para o formato adequado para o modelo de rede neural
+train_images = train_images.values.reshape(-1, 28, 28, 1)
+validation_images = validation_images.values.reshape(-1, 28, 28, 1)
 
-# Visualizar algumas imagens de dígitos para cada classe presente
-examples_per_class = 5
+# Dividindo os dados de treinamento em subconjuntos de treinamento e teste
+train_images_train, train_images_test, train_labels_train, train_labels_test = train_test_split(
+    train_images, train_labels_one_hot, test_size=0.2, random_state=42
+)
 
-# Identificar as classes presentes nos dados
-classes_presentes = np.unique(train_labels)
-
-# Criar subplots para as classes presentes
-fig, axes = plt.subplots(len(classes_presentes), examples_per_class, figsize=(10, len(classes_presentes) * 2))
-fig.tight_layout(pad=3.0)
-
-for class_idx, digit in enumerate(classes_presentes):
-    idxs = np.where(train_labels == digit)[0]
-    idxs = np.random.choice(idxs, examples_per_class, replace=False)
-    for j, idx in enumerate(idxs):
-        ax = axes[class_idx, j]
-        ax.imshow(train_images[idx], cmap='gray')
-        ax.axis('off')
-        if j == 0:
-            ax.set_title(f"Classe {digit}")
-
-plt.show()
-
-# Definir o modelo
+# Construindo o modelo de rede neural
 model = Sequential([
-    Flatten(input_shape=(28, 28)),
+    Flatten(input_shape=(28, 28, 1)),
     Dense(512, activation='relu'),
     Dropout(0.2),
     Dense(10, activation='softmax')
 ])
 
-# Compilar o modelo
+# Compilando o modelo
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Sumário do Modelo
-model.summary()
+# Treinando o modelo com os dados de treinamento
+history = model.fit(train_images_train, train_labels_train, epochs=10, batch_size=128, validation_split=0.2)
 
-# Visualização Gráfica da Arquitetura (requer pydot e graphviz)
-plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True)
-
-# Treinar o modelo e guardar o histórico
-history = model.fit(train_images, train_labels_one_hot, epochs=10, batch_size=128, validation_split=0.2)
-
-# Visualizar o histórico de treinamento
+# Visualizando o histórico de acurácia e perda durante o treinamento
 plt.figure(figsize=(12, 4))
 plt.subplot(1, 2, 1)
 plt.plot(history.history['accuracy'], label='Acurácia no Treinamento')
@@ -86,13 +64,48 @@ plt.xlabel('Época')
 plt.legend()
 plt.show()
 
-# Fazer previsões
-predictions = model.predict(validation_images.reshape(-1, 28, 28))
-predicted_labels = np.argmax(predictions, axis=1)
+# Fazendo previsões no subconjunto de teste
+test_predictions = model.predict(train_images_test)
+test_predicted_labels = np.argmax(test_predictions, axis=1)
+test_true_labels = np.argmax(train_labels_test, axis=1)
 
-# Preparar o arquivo de submissão
+# Identificando os índices dos acertos e erros
+corrects = np.where(test_predicted_labels == test_true_labels)[0]
+incorrects = np.where(test_predicted_labels != test_true_labels)[0]
+
+# Selecionando aleatoriamente exemplos de acertos e erros
+selected_corrects = np.random.choice(corrects, 5, replace=False)
+selected_incorrects = np.random.choice(incorrects, 5, replace=False)
+
+# Plotando exemplos de acertos
+plt.figure(figsize=(10, 5))
+for i, correct in enumerate(selected_corrects):
+    plt.subplot(1, 5, i + 1)
+    plt.imshow(train_images_test[correct].reshape(28, 28), cmap='gray')
+    plt.title(f"Correto: {test_true_labels[correct]}")
+    plt.axis('off')
+plt.suptitle("Exemplos de Acertos")
+plt.show()
+
+# Plotando exemplos de erros
+plt.figure(figsize=(10, 5))
+for i, incorrect in enumerate(selected_incorrects):
+    plt.subplot(1, 5, i + 1)
+    plt.imshow(train_images_test[incorrect].reshape(28, 28), cmap='gray')
+    plt.title(f"Errado: {test_predicted_labels[incorrect]}")
+    plt.axis('off')
+plt.suptitle("Exemplos de Erros")
+plt.show()
+
+# Fazendo previsões no conjunto de validação para submissão
+validation_predictions = model.predict(validation_images)
+validation_predicted_labels = np.argmax(validation_predictions, axis=1)
+
+# Preparando o arquivo de submissão com as previsões
 submission = pd.DataFrame({
-    'ImageId': range(1, len(predicted_labels) + 1),
-    'Label': predicted_labels
+    'ImageId': range(1, len(validation_predicted_labels) + 1),
+    'Label': validation_predicted_labels
 })
+
+# Salvando o arquivo de submissão
 submission.to_csv('submission.csv', index=False)
